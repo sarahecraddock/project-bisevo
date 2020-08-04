@@ -259,7 +259,7 @@
             "linuxUserName": "[steps('osConfig').vmUserName]",
             "linuxSSHKey": "[string(steps('osConfig').vmSSHKey.sshPublicKey)]",
             "splunkUser": "[steps('splunkConfig').splunkUserName]",
-            "splunkPassword": "[steps('splunkConfig').splunkPassword]",
+            "splunkPassword": "[string(steps('splunkConfig').splunkPassword.password)]",
             "numberOfIndexers": "[steps('indexerConfig').indexerCount]",
             "indexerSku": "[steps('indexerConfig').indexerSize]",
             "indexerPipelines": "[steps('indexerConfig').indexerPipelines]",
