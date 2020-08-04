@@ -257,7 +257,7 @@
         ],
         "outputs": {
             "linuxUserName": "[steps('osConfig').vmUserName]",
-            "linuxSSHKey": "[steps('osConfig').vmSSHKey]",
+            "linuxSSHKey": "[steps('osConfig').vmSSHKey.sshPublicKey]",
             "splunkUser": "[steps('splunkConfig').splunkUserName]",
             "splunkPassword": "[steps('splunkConfig').splunkPassword]",
             "numberOfIndexers": "[steps('indexerConfig').indexerCount]",
