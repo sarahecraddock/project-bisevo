@@ -1,0 +1,1306 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "virtualNetworkAddressPrefix": {
+            "defaultValue": "192.168.0.0/16",
+            "type": "string",
+            "metadata": {
+                "description": "VNET address space."
+            }
+        },
+        "indexerSubnetAddressPrefix": {
+            "defaultValue": "192.168.0.0/24",
+            "type": "string",
+            "metadata": {
+                "description": "Indexer subnet address space."
+            }
+        },
+        "searchSubnetAddressPrefix": {
+            "defaultValue": "192.168.1.0/24",
+            "type": "string",
+            "metadata": {
+                "description": "Search subnet address space."
+            }
+        },
+        "managementSubnetAddressPrefix": {
+            "defaultValue": "192.168.3.0/24",
+            "type": "string",
+            "metadata": {
+                "description": "Management subnet address space."
+            }
+        },
+        "linuxUserName": {
+            "type": "string",
+            "defaultValue": "azadmin",
+            "metadata": {
+                "description": "User name for linux VMs"
+            }
+        },
+        "linuxSSHKey": {
+            "type": "string",
+            "metadata": {
+                "description": "Public key for SSH authentication"
+            }
+        },
+        "numberOfIndexers": {
+            "type": "int",
+            "defaultValue": 3,
+            "metadata": {
+                "description": "Number of Indexer VMs"
+            }
+        },
+        "numberOfSearchHeads": {
+            "type": "int",
+            "defaultValue": 3,
+            "metadata": {
+                "description": "Number of Search Head VMs"
+            }
+        },
+        "indexerSku": {
+            "type": "string",
+            "defaultValue": "Standard_D32s_v3",
+            "metadata": {
+                "description": "VM SKU for Splunk indexers"
+            }
+        },
+        "searchHeadSku": {
+            "type": "string",
+            "defaultValue": "Standard_D32s_v3",
+            "metadata": {
+                "description": "VM SKU for Splunk Search Heads"
+            }
+        },
+        "cmSku": {
+            "type": "string",
+            "defaultValue": "Standard_D2s_v3",
+            "metadata": {
+                "description": "VM SKU for cluster master"
+            }
+        },
+        "dnsPrefix": {
+            "type": "string",
+            "defaultValue": "splunk",
+            "metadata": {
+                "description": "DNS prefix for public IP addresses"
+            }
+        },
+        "vmImage": {
+            "type": "object",
+            "defaultValue": {
+                "publisher": "Canonical",
+                "offer": "UbuntuServer",
+                "sku": "16.04-LTS",
+                "version": "latest"
+            }
+        },
+        "splunkUser": {
+            "type": "string",
+            "defaultValue": "admin",
+            "metadata": {
+                "description": "Splunk user name to user during Splunk install"
+            }
+        },
+        "splunkPassword": {
+            "type": "securestring",
+            "metadata": {
+                "description": "Password to use during Splunk install"
+            }
+        },
+        "cmZone": {
+            "type": "string",
+            "defaultValue": "1",
+            "metadata": {
+                "description": "Availability zone for Cluster Master"
+            }
+        },
+        "indexerPipelines": {
+            "type": "int",
+            "defaultValue": 2,
+            "metadata": {
+                "description": "Number of parallel ingestion pipelines on Indexer nodes"
+            }
+        },
+        "workspaceLocation": {
+            "type": "string",
+            "defaultValue": "westeurope",
+            "metadata": {
+                "description": "Location for log analytics workspace - included as parameter as VM Insights not available in every region"
+            }
+        }
+    },
+    "variables": {
+        "resgpguid": "[substring(replace(guid(resourceGroup().id), '-', ''), 0, 4)]",
+        "vnetName": "splunkvnet",
+        "vnetId": "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]",
+        "indexerSubnetName": "indexer",
+        "searchSubnetName": "search",
+        "managementSubnetName": "management",
+        "indexerSubnetId": "[concat(variables('vnetID'),'/subnets/', variables('indexerSubnetName'))]",
+        "searchSubnetId": "[concat(variables('vnetID'),'/subnets/', variables('searchSubnetName'))]",
+        "managementSubnetId": "[concat(variables('vnetID'),'/subnets/', variables('managementSubnetName'))]",
+        "splunkNsgName": "splunk",
+        "downloadRoot": "https://dwtoolstore.blob.core.windows.net/splunk/install/",
+        "cmInstallScriptDir": "[concat(variables('downloadRoot'), 'cluster-master')]",
+        "indexerInstallScriptDir": "[concat(variables('downloadRoot'), 'indexer')]",
+        "shInstallScriptDir": "[concat(variables('downloadRoot'), 'search-head')]",
+        "splunkDownload": "https://dwtoolstore.blob.core.windows.net/splunk/splunk-7.3.6-47d8552a4d84-Linux-x86_64.tgz",
+        "workspaceName": "[concat('splunklogs-', variables('resgpguid'))]",
+        "daExtensionVersion": "9.5",
+        "mmaExtensionVersion": "1.7",
+        "workspaceResourceId": "[concat('Microsoft.OperationalInsights/workspaces/', variables('workspaceName'))]",
+        "dnsZoneName": "agci.splunk",
+        "isL": "[contains(parameters('indexerSku'), '_L')]",
+        "vmType": "[if(variables('isL'), 'lv2disks', 'otherdisks')]",
+        "lv2disks": [
+            {
+                "caching": "None",
+                "createOption": "Empty",
+                "lun": 0,
+                "diskSizeGB": 16384,
+                "managedDisk": {
+                    "storageAccountType": "Standard_LRS"
+                }
+            }
+        ],
+        "otherdisks": [
+            {
+                "caching": "None",
+                "createOption": "Empty",
+                "lun": 1,
+                "diskSizeGB": 16384,
+                "managedDisk": {
+                    "storageAccountType": "Standard_LRS"
+                }
+            },
+            {
+                "caching": "None",
+                "createOption": "Empty",
+                "lun": 0,
+                "diskSizeGB": 4096,
+                "managedDisk": {
+                    "storageAccountType": "Premium_LRS"
+                }
+            }
+        ]
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Network/networkSecurityGroups",
+            "apiVersion": "2018-08-01",
+            "name": "splunk",
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "securityRules": [
+                    {
+                        "name": "Port_8000",
+                        "properties": {
+                            "description": "Access to Splunk admin console",
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "8000",
+                            "sourceAddressPrefix": "*",
+                            "destinationAddressPrefix": "*",
+                            "access": "Allow",
+                            "priority": 100,
+                            "direction": "Inbound"
+                        }
+                    },
+                    {
+                        "name": "Port_9997",
+                        "properties": {
+                            "description": "Splunk receiver",
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "9997",
+                            "sourceAddressPrefix": "*",
+                            "destinationAddressPrefix": "*",
+                            "access": "Allow",
+                            "priority": 150,
+                            "direction": "Inbound"
+                        }
+                    },
+                    {
+                        "name": "Port_22",
+                        "properties": {
+                            "description": "SSH access to VMs",
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "22",
+                            "sourceAddressPrefix": "*",
+                            "destinationAddressPrefix": "*",
+                            "access": "Allow",
+                            "priority": 200,
+                            "direction": "Inbound"
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Network/virtualNetworks",
+            "name": "[variables('vnetName')]",
+            "apiVersion": "2018-08-01",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "[concat('Microsoft.Network/networkSecurityGroups/', variables('splunkNsgName'))]"
+            ],
+            "properties": {
+                "addressSpace": {
+                    "addressPrefixes": [
+                        "[parameters('virtualNetworkAddressPrefix')]"
+                    ]
+                },
+                "subnets": [
+                    {
+                        "name": "[variables('indexerSubnetName')]",
+                        "properties": {
+                            "addressPrefix": "[parameters('indexerSubnetAddressPrefix')]",
+                            "networkSecurityGroup": {
+                                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('splunkNsgName'))]"
+                            }
+                        }
+                    },
+                    {
+                        "name": "[variables('searchSubnetName')]",
+                        "properties": {
+                            "addressPrefix": "[parameters('searchSubnetAddressPrefix')]",
+                            "networkSecurityGroup": {
+                                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('splunkNsgName'))]"
+                            }
+                        }
+                    },
+                    {
+                        "name": "[variables('managementSubnetName')]",
+                        "properties": {
+                            "addressPrefix": "[parameters('managementSubnetAddressPrefix')]",
+                            "networkSecurityGroup": {
+                                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('splunkNsgName'))]"
+                            }
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Network/privateDnsZones",
+            "apiVersion": "2018-09-01",
+            "name": "[variables('dnsZoneName')]",
+            "dependsOn": [
+                "[concat('Microsoft.Network/virtualNetworks/', variables('vnetName'))]"
+            ],
+            "location": "global",
+            "properties": {
+            },
+            "resources": [
+                {
+                    "name": "vnet-link",
+                    "type": "virtualNetworkLinks",
+                    "apiVersion": "2018-09-01",
+                    "location": "global",
+                    "dependsOn": [
+                        "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]",
+                        "[resourceId('Microsoft.Network/privateDnsZones', variables('dnsZoneName'))]"
+                    ],
+                    "properties": {
+                        "virtualNetwork": {
+                            "id": "[resourceId('Microsoft.Network/virtualNetworks', variables('vnetName'))]"
+                        },
+                        "registrationEnabled": true
+                    }
+                }
+            ]
+        },
+        {
+            "type": "Microsoft.Network/publicIPAddresses",
+            "apiVersion": "2018-08-01",
+            "name": "master",
+            "location": "[resourceGroup().location]",
+            "sku": {
+                "name": "Standard"
+            },
+            "tags": {
+                "displayName": "master"
+            },
+            "properties": {
+                "publicIPAllocationMethod": "Static",
+                "dnsSettings": {
+                    "domainNameLabel": "[concat(parameters('dnsPrefix'), '-master-', variables('resgpguid'))]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Network/publicIPAddresses",
+            "apiVersion": "2018-08-01",
+            "name": "[concat('indexer', copyindex())]",
+            "location": "[resourceGroup().location]",
+            "sku": {
+                "name": "Standard"
+            },
+            "copy": {
+                "name": "indexerpipcopy",
+                "count": "[parameters('numberOfIndexers')]"
+            },
+            "tags": {
+                "displayName": "[concat('indexer', copyindex())]"
+            },
+            "properties": {
+                "publicIPAllocationMethod": "Static",
+                "dnsSettings": {
+                    "domainNameLabel": "[concat(parameters('dnsPrefix'), '-indexer', copyindex(), '-', variables('resgpguid'))]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Network/publicIPAddresses",
+            "apiVersion": "2018-08-01",
+            "name": "[concat('sh', copyindex())]",
+            "location": "[resourceGroup().location]",
+            "sku": {
+                "name": "Standard"
+            },
+            "copy": {
+                "name": "shpipcopy",
+                "count": "[parameters('numberOfSearchHeads')]"
+            },
+            "tags": {
+                "displayName": "[concat('sh', copyindex())]"
+            },
+            "properties": {
+                "publicIPAllocationMethod": "Static",
+                "dnsSettings": {
+                    "domainNameLabel": "[concat(parameters('dnsPrefix'), '-sh', copyindex(), '-', variables('resgpguid'))]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Network/networkInterfaces",
+            "apiVersion": "2018-08-01",
+            "name": "master",
+            "location": "[resourceGroup().location]",
+            "tags": {
+                "displayName": "master"
+            },
+            "dependsOn": [
+                "[concat('Microsoft.Network/virtualNetworks/', variables('vnetName'))]",
+                "[concat('Microsoft.Network/privateDnsZones/', variables('dnsZoneName'))]",
+                "[concat('Microsoft.Network/publicIPAddresses/', 'master')]"
+            ],
+            "properties": {
+                "ipConfigurations": [
+                    {
+                        "name": "ipconfig1",
+                        "properties": {
+                            "publicIPAddress": {
+                                "id": "[resourceId('Microsoft.Network/publicIPAddresses', 'master')]"
+                            },
+                            "privateIPAllocationMethod": "Dynamic",
+                            "subnet": {
+                                "id": "[variables('managementSubnetId')]"
+                            }
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Network/networkInterfaces",
+            "apiVersion": "2018-08-01",
+            "name": "[concat('indexer', copyindex())]",
+            "location": "[resourceGroup().location]",
+            "copy": {
+                "name": "indexerniccopy",
+                "count": "[parameters('numberOfIndexers')]"
+            },
+            "tags": {
+                "displayName": "[concat('indexer', copyindex())]"
+            },
+            "dependsOn": [
+                "[concat('Microsoft.Network/virtualNetworks/', variables('vnetName'))]",
+                "[concat('Microsoft.Network/privateDnsZones/', variables('dnsZoneName'))]",
+                "[concat('Microsoft.Network/publicIPAddresses/', 'indexer', copyindex())]"
+            ],
+            "properties": {
+                "enableAcceleratedNetworking": true,
+                "ipConfigurations": [
+                    {
+                        "name": "ipconfig1",
+                        "properties": {
+                            "publicIPAddress": {
+                                "id": "[resourceId('Microsoft.Network/publicIPAddresses', concat('indexer', copyindex()))]"
+                            },
+                            "privateIPAllocationMethod": "Dynamic",
+                            "subnet": {
+                                "id": "[variables('indexerSubnetId')]"
+                            }
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Network/networkInterfaces",
+            "apiVersion": "2018-08-01",
+            "name": "[concat('sh', copyindex())]",
+            "location": "[resourceGroup().location]",
+            "copy": {
+                "name": "shniccopy",
+                "count": "[parameters('numberOfSearchHeads')]"
+            },
+            "tags": {
+                "displayName": "[concat('sh', copyindex())]"
+            },
+            "dependsOn": [
+                "[concat('Microsoft.Network/virtualNetworks/', variables('vnetName'))]",
+                "[concat('Microsoft.Network/privateDnsZones/', variables('dnsZoneName'))]",
+                "[concat('Microsoft.Network/publicIPAddresses/', 'sh', copyindex())]",
+                "[concat('Microsoft.Network/loadBalancers/', 'loadbalancer-sh')]"
+            ],
+            "properties": {
+                "enableAcceleratedNetworking": true,
+                "ipConfigurations": [
+                    {
+                        "name": "ipconfig1",
+                        "properties": {
+                            "loadBalancerBackendAddressPools": [
+                                {
+                                    "id": "[concat(resourceId('Microsoft.Network/loadBalancers', 'loadBalancer-sh'), '/backendAddressPools/LoadBalancerBackEndPool1')]"
+                                }
+                            ],
+                            "publicIPAddress": {
+                                "id": "[resourceId('Microsoft.Network/publicIPAddresses', concat('sh', copyindex()))]"
+                            },
+                            "privateIPAllocationMethod": "Dynamic",
+                            "subnet": {
+                                "id": "[variables('searchSubnetId')]"
+                            }
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "name": "master",
+            "type": "Microsoft.Compute/virtualMachines",
+            "apiVersion": "2019-03-01",
+            "location": "[resourceGroup().location]",
+            "zones": [ "[parameters('cmZone')]" ],
+            "dependsOn": [
+                "[concat('Microsoft.Network/networkInterfaces/', 'master')]",
+                "[concat('Microsoft.OperationalInsights/workspaces/', variables('workspaceName'))]"
+            ],
+            "properties": {
+                "hardwareProfile": {
+                    "vmSize": "[parameters('cmSku')]"
+                },
+                "storageProfile": {
+                    "imageReference": {
+                        "publisher": "[parameters('vmImage').publisher]",
+                        "offer": "[parameters('vmImage').offer]",
+                        "sku": "[parameters('vmImage').sku]",
+                        "version": "[parameters('vmImage').version]"
+                    },
+                    "osDisk": {
+                        "name": "master-OSDisk",
+                        "caching": "ReadWrite",
+                        "createOption": "FromImage",
+                        "diskSizeGB": 30,
+                        "osType": "Linux",
+                        "managedDisk": {
+                            "storageAccountType": "Premium_LRS"
+                        }
+                    }
+                },
+                "osProfile": {
+                    "computerName": "master",
+                    "adminUsername": "[parameters('linuxUserName')]",
+                    "linuxConfiguration": {
+                        "ssh": {
+                            "publicKeys": [
+                                {
+                                    "path": "[concat('/home/', parameters('linuxUsername'), '/.ssh/authorized_keys')]",
+                                    "keyData": "[parameters('linuxSSHKey')]"
+                                }
+                            ]
+                        }
+                    }
+                },
+                "networkProfile": {
+                    "networkInterfaces": [
+                        {
+                            "id": "[resourceId('Microsoft.Network/networkInterfaces', 'master')]"
+                        }
+                    ]
+                }
+            },
+            "resources": [
+                {
+                    "apiVersion": "2017-03-30",
+                    "type": "extensions",
+                    "name": "config-app",
+                    "location": "[resourceGroup().location]",
+                    "dependsOn": [
+                        "[concat('Microsoft.Compute/virtualMachines/', 'master')]"
+                    ],
+                    "properties": {
+                        "publisher": "Microsoft.Azure.Extensions",
+                        "type": "CustomScript",
+                        "typeHandlerVersion": "2.0",
+                        "autoUpgradeMinorVersion": true,
+                        "settings": {
+                            "fileUris": [
+                                "[concat(variables('cmInstallScriptDir'), '/install.sh')]"
+                            ]
+                        },
+                        "protectedSettings": {
+                            "commandToExecute": "[concat('sudo sh install.sh ', variables('splunkDownload'), ' ', substring(string(reference('Microsoft.Compute/virtualMachines/master', '2019-03-01', 'Full').zones), 2, 1), ' ', parameters('splunkUser'), ' ', parameters('splunkPassword'), ' ', variables('cmInstallScriptDir'))]"
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "[concat('indexer', copyindex())]",
+            "type": "Microsoft.Compute/virtualMachines",
+            "apiVersion": "2019-03-01",
+            "location": "[resourceGroup().location]",
+            "zones": "[split(string(add(mod(copyIndex(),3),1)), ',')]",
+            "copy": {
+                "name": "indexercopy",
+                "count": "[parameters('numberOfIndexers')]"
+            },
+            "dependsOn": [
+                "[concat('Microsoft.Network/networkInterfaces/', 'indexer', copyindex())]",
+                "[concat('Microsoft.OperationalInsights/workspaces/', variables('workspaceName'))]"
+            ],
+            "properties": {
+                "hardwareProfile": {
+                    "vmSize": "[parameters('indexerSku')]"
+                },
+                "storageProfile": {
+                    "imageReference": {
+                        "publisher": "[parameters('vmImage').publisher]",
+                        "offer": "[parameters('vmImage').offer]",
+                        "sku": "[parameters('vmImage').sku]",
+                        "version": "[parameters('vmImage').version]"
+                    },
+                    "osDisk": {
+                        "name": "[concat('indexer', copyindex(), '-OSDisk')]",
+                        "caching": "ReadWrite",
+                        "createOption": "FromImage",
+                        "diskSizeGB": 30,
+                        "osType": "Linux",
+                        "managedDisk": {
+                            "storageAccountType": "Premium_LRS"
+                        }
+                    },
+                    "dataDisks": 
+                        "[variables(variables('vmType'))]"
+                },
+                "osProfile": {
+                    "computerName": "[concat('indexer', copyindex())]",
+                    "adminUsername": "[parameters('linuxUserName')]",
+                    "linuxConfiguration": {
+                        "ssh": {
+                            "publicKeys": [
+                                {
+                                    "path": "[concat('/home/', parameters('linuxUsername'), '/.ssh/authorized_keys')]",
+                                    "keyData": "[parameters('linuxSSHKey')]"
+                                }
+                            ]
+                        }
+                    }
+                },
+                "networkProfile": {
+                    "networkInterfaces": [
+                        {
+                            "id": "[resourceId('Microsoft.Network/networkInterfaces', concat('indexer', copyindex()))]"
+                        }
+                    ]
+                }
+            },
+            "resources": [
+                {
+                    "apiVersion": "2017-03-30",
+                    "type": "extensions",
+                    "name": "config-app",
+                    "location": "[resourceGroup().location]",
+                    "dependsOn": [
+                        "[concat('Microsoft.Compute/virtualMachines/', 'indexer', copyindex())]",
+                        "[concat('Microsoft.Compute/virtualMachines/master/extensions/config-app')]"
+                    ],
+                    "properties": {
+                        "publisher": "Microsoft.Azure.Extensions",
+                        "type": "CustomScript",
+                        "typeHandlerVersion": "2.0",
+                        "autoUpgradeMinorVersion": true,
+                        "settings": {
+                            "fileUris": [
+                                "[concat(variables('indexerInstallScriptDir'), '/install.sh')]"
+                            ]
+                        },
+                        "protectedSettings": {
+                            "commandToExecute": "[concat('sudo bash install.sh ', variables('splunkDownload'), ' ', substring(string(reference(concat('Microsoft.Compute/virtualMachines/indexer', copyindex()), '2019-03-01', 'Full').zones), 2, 1), ' ', parameters('splunkUser'), ' ', parameters('splunkPassword'), ' ', variables('indexerInstallScriptDir'), ' ', parameters('indexerPipelines'), ' ', reference('Microsoft.Network/networkInterfaces/master', '2018-08-01').ipConfigurations[0].properties.privateIPAddress, ' ', parameters('indexerSku'))]"
+                        }
+                    }
+                },
+                {
+                    "type": "extensions",
+                    "apiVersion": "2017-12-01",
+                    "name": "DependencyAgentLinux",
+                    "location": "[resourceGroup().location]",
+                    "dependsOn": [
+                        "[concat('Microsoft.Compute/virtualMachines/', 'indexer', copyindex())]"
+                    ],
+                    "properties": {
+                        "publisher": "Microsoft.Azure.Monitoring.DependencyAgent",
+                        "type": "DependencyAgentLinux",
+                        "typeHandlerVersion": "[variables('daExtensionVersion')]",
+                        "autoUpgradeMinorVersion": true
+                    }
+                },
+                {
+                    "type": "extensions",
+                    "apiVersion": "2017-12-01",
+                    "name": "OMSExtension",
+                    "location": "[resourceGroup().location]",
+                    "dependsOn": [
+                        "[concat('Microsoft.Compute/virtualMachines/', 'indexer', copyindex())]"
+                    ],
+                    "properties": {
+                        "publisher": "Microsoft.EnterpriseCloud.Monitoring",
+                        "type": "OmsAgentForLinux",
+                        "typeHandlerVersion": "[variables('mmaExtensionVersion')]",
+                        "autoUpgradeMinorVersion": true,
+                        "settings": {
+                            "workspaceId": "[reference(variables('workspaceResourceId'), '2017-03-15-preview').customerId]",
+                            "stopOnMultipleConnections": true
+                        },
+                        "protectedSettings": {
+                            "workspaceKey": "[listKeys(variables('workspaceResourceId'), '2017-03-15-preview').primarySharedKey]"
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "[concat('sh', copyindex())]",
+            "type": "Microsoft.Compute/virtualMachines",
+            "apiVersion": "2019-03-01",
+            "location": "[resourceGroup().location]",
+            "zones": "[split(string(add(mod(copyIndex(),3),1)), ',')]",
+            "copy": {
+                "name": "shcopy",
+                "count": "[parameters('numberOfSearchHeads')]"
+            },
+            "dependsOn": [
+                "[concat('Microsoft.Network/networkInterfaces/', 'sh', copyindex())]",
+                "[concat('Microsoft.OperationalInsights/workspaces/', variables('workspaceName'))]"
+            ],
+            "properties": {
+                "hardwareProfile": {
+                    "vmSize": "[parameters('searchHeadSku')]"
+                },
+                "storageProfile": {
+                    "imageReference": {
+                        "publisher": "[parameters('vmImage').publisher]",
+                        "offer": "[parameters('vmImage').offer]",
+                        "sku": "[parameters('vmImage').sku]",
+                        "version": "[parameters('vmImage').version]"
+                    },
+                    "osDisk": {
+                        "name": "[concat('sh', copyindex(), '-OSDisk')]",
+                        "caching": "ReadWrite",
+                        "createOption": "FromImage",
+                        "diskSizeGB": 30,
+                        "osType": "Linux",
+                        "managedDisk": {
+                            "storageAccountType": "Premium_LRS"
+                        }
+                    },
+                    "dataDisks": [
+                        {
+                            "name": "[concat('sh', copyindex(), '-DataDisk')]",
+                            "caching": "ReadWrite",
+                            "createOption": "Empty",
+                            "lun": 0,
+                            "diskSizeGB": 1023,
+                            "managedDisk": {
+                                "storageAccountType": "Premium_LRS"
+                            }
+                        }
+                    ]
+                },
+                "osProfile": {
+                    "computerName": "[concat('sh', copyindex())]",
+                    "adminUsername": "[parameters('linuxUserName')]",
+                    "linuxConfiguration": {
+                        "ssh": {
+                            "publicKeys": [
+                                {
+                                    "path": "[concat('/home/', parameters('linuxUsername'), '/.ssh/authorized_keys')]",
+                                    "keyData": "[parameters('linuxSSHKey')]"
+                                }
+                            ]
+                        }
+                    }
+                },
+                "networkProfile": {
+                    "networkInterfaces": [
+                        {
+                            "id": "[resourceId('Microsoft.Network/networkInterfaces', concat('sh', copyindex()))]"
+                        }
+                    ]
+                }
+            },
+            "resources": [
+                {
+                    "apiVersion": "2017-03-30",
+                    "type": "extensions",
+                    "name": "config-app",
+                    "location": "[resourceGroup().location]",
+                    "dependsOn": [
+                        "[concat('Microsoft.Compute/virtualMachines/', 'sh', copyindex())]",
+                        "[concat('Microsoft.Compute/virtualMachines/master/extensions/config-app')]"
+                    ],
+                    "properties": {
+                        "publisher": "Microsoft.Azure.Extensions",
+                        "type": "CustomScript",
+                        "typeHandlerVersion": "2.0",
+                        "autoUpgradeMinorVersion": true,
+                        "settings": {
+                            "fileUris": [
+                                "[concat(variables('shInstallScriptDir'), '/install.sh')]"
+                            ]
+                        },
+                        "protectedSettings": {
+                            "commandToExecute": "[concat('sudo sh install.sh ', variables('splunkDownload'), ' ', substring(string(reference(concat('Microsoft.Compute/virtualMachines/sh', copyindex()), '2019-03-01', 'Full').zones), 2, 1), ' ', parameters('splunkUser'), ' ', parameters('splunkPassword'), ' ', variables('shInstallScriptDir'), ' ', reference('Microsoft.Network/networkInterfaces/master', '2018-08-01').ipConfigurations[0].properties.privateIPAddress, ' ', variables('dnsZoneName'), ' ', parameters('numberOfSearchHeads'), ' ', copyindex())]"
+                        }
+                    }
+                },
+                {
+                    "type": "extensions",
+                    "apiVersion": "2017-12-01",
+                    "name": "DependencyAgentLinux",
+                    "location": "[resourceGroup().location]",
+                    "dependsOn": [
+                        "[concat('Microsoft.Compute/virtualMachines/', 'sh', copyindex())]"
+                    ],
+                    "properties": {
+                        "publisher": "Microsoft.Azure.Monitoring.DependencyAgent",
+                        "type": "DependencyAgentLinux",
+                        "typeHandlerVersion": "[variables('daExtensionVersion')]",
+                        "autoUpgradeMinorVersion": true
+                    }
+                },
+                {
+                    "type": "extensions",
+                    "apiVersion": "2017-12-01",
+                    "name": "OMSExtension",
+                    "location": "[resourceGroup().location]",
+                    "dependsOn": [
+                        "[concat('Microsoft.Compute/virtualMachines/', 'sh', copyindex())]"
+                    ],
+                    "properties": {
+                        "publisher": "Microsoft.EnterpriseCloud.Monitoring",
+                        "type": "OmsAgentForLinux",
+                        "typeHandlerVersion": "[variables('mmaExtensionVersion')]",
+                        "autoUpgradeMinorVersion": true,
+                        "settings": {
+                            "workspaceId": "[reference(variables('workspaceResourceId'), '2017-03-15-preview').customerId]",
+                            "stopOnMultipleConnections": true
+                        },
+                        "protectedSettings": {
+                            "workspaceKey": "[listKeys(variables('workspaceResourceId'), '2017-03-15-preview').primarySharedKey]"
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "apiVersion": "2017-03-15-preview",
+            "type": "Microsoft.OperationalInsights/workspaces",
+            "name": "[variables('workspaceName')]",
+            "location": "[parameters('workspaceLocation')]",
+            "properties": {
+                "sku": {
+                    "name": "PerGB2018"
+                }
+            },
+            "resources": [
+                {
+                    "apiVersion": "2015-11-01-preview",
+                    "location": "[parameters('workspaceLocation')]",
+                    "name": "[concat('ServiceMap', '(', variables('workspaceName'),')')]",
+                    "type": "Microsoft.OperationsManagement/solutions",
+                    "dependsOn": [
+                        "[concat('Microsoft.OperationalInsights/workspaces/', variables('workspaceName'))]"
+                    ],
+                    "properties": {
+                        "workspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces/', variables('workspaceName'))]"
+                    },
+
+                    "plan": {
+                        "name": "[concat('ServiceMap', '(', variables('workspaceName'),')')]",
+                        "publisher": "Microsoft",
+                        "product": "[Concat('OMSGallery/', 'ServiceMap')]",
+                        "promotionCode": ""
+                    }
+                },
+                {
+                    "apiVersion": "2015-11-01-preview",
+                    "location": "[parameters('workspaceLocation')]",
+                    "name": "[concat('InfrastructureInsights', '(', variables('workspaceName'),')')]",
+                    "type": "Microsoft.OperationsManagement/solutions",
+                    "dependsOn": [
+                        "[concat('Microsoft.OperationalInsights/workspaces/', variables('workspaceName'))]"
+                    ],
+                    "properties": {
+                        "workspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces/', variables('workspaceName'))]"
+                    },
+                    "plan": {
+                        "name": "[concat('InfrastructureInsights', '(', variables('workspaceName'),')')]",
+                        "publisher": "Microsoft",
+                        "product": "[Concat('OMSGallery/', 'InfrastructureInsights')]",
+                        "promotionCode": ""
+                    }
+                },
+                {
+                    "apiVersion": "2015-11-01-preview",
+                    "type": "datasources",
+                    "name": "VMInsights-LogicalDisk-Pct-Free-Space",
+                    "dependsOn": [
+                        "[variables('WorkspaceResourceId')]"
+                    ],
+                    "kind": "WindowsPerformanceCounter",
+                    "properties": {
+                        "objectName": "LogicalDisk",
+                        "instanceName": "*",
+                        "intervalSeconds": 60,
+                        "counterName": "% Free Space"
+                    }
+                },
+                {
+                    "apiVersion": "2015-11-01-preview",
+                    "type": "datasources",
+                    "name": "VMInsights-LogicalDisk-Avg-DiskSecRead",
+                    "dependsOn": [
+                        "[variables('WorkspaceResourceId')]"
+                    ],
+                    "kind": "WindowsPerformanceCounter",
+                    "properties": {
+                        "objectName": "LogicalDisk",
+                        "instanceName": "*",
+                        "intervalSeconds": 60,
+                        "counterName": "Avg. Disk sec/Read"
+                    }
+                },
+                {
+                    "apiVersion": "2015-11-01-preview",
+                    "type": "datasources",
+                    "name": "VMInsights-LogicalDisk-Avg-DiskSecTransfer",
+                    "dependsOn": [
+                        "[variables('WorkspaceResourceId')]"
+                    ],
+                    "kind": "WindowsPerformanceCounter",
+                    "properties": {
+                        "objectName": "LogicalDisk",
+                        "instanceName": "*",
+                        "intervalSeconds": 60,
+                        "counterName": "Avg. Disk sec/Transfer"
+                    }
+                },
+                {
+                    "apiVersion": "2015-11-01-preview",
+                    "type": "datasources",
+                    "name": "VMInsights-LogicalDisk-Avg-DiskSecWrite",
+                    "dependsOn": [
+                        "[variables('WorkspaceResourceId')]"
+                    ],
+                    "kind": "WindowsPerformanceCounter",
+                    "properties": {
+                        "objectName": "LogicalDisk",
+                        "instanceName": "*",
+                        "intervalSeconds": 60,
+                        "counterName": "Avg. Disk sec/Write"
+                    }
+                },
+                {
+                    "apiVersion": "2015-11-01-preview",
+                    "type": "datasources",
+                    "name": "VMInsights-LogicalDisk-Disk-BytesSec",
+                    "dependsOn": [
+                        "[variables('WorkspaceResourceId')]"
+                    ],
+                    "kind": "WindowsPerformanceCounter",
+                    "properties": {
+                        "objectName": "LogicalDisk",
+                        "instanceName": "*",
+                        "intervalSeconds": 60,
+                        "counterName": "Disk Bytes/sec"
+                    }
+                },
+                {
+                    "apiVersion": "2015-11-01-preview",
+                    "type": "datasources",
+                    "name": "VMInsights-LogicalDisk-Disk-ReadBytesSec",
+                    "dependsOn": [
+                        "[variables('WorkspaceResourceId')]"
+                    ],
+                    "kind": "WindowsPerformanceCounter",
+                    "properties": {
+                        "objectName": "LogicalDisk",
+                        "instanceName": "*",
+                        "intervalSeconds": 60,
+                        "counterName": "Disk Read Bytes/sec"
+                    }
+                },
+                {
+                    "apiVersion": "2015-11-01-preview",
+                    "type": "datasources",
+                    "name": "VMInsights-LogicalDisk-Disk-ReadsSec",
+                    "dependsOn": [
+                        "[variables('WorkspaceResourceId')]"
+                    ],
+                    "kind": "WindowsPerformanceCounter",
+                    "properties": {
+                        "objectName": "LogicalDisk",
+                        "instanceName": "*",
+                        "intervalSeconds": 60,
+                        "counterName": "Disk Reads/sec"
+                    }
+                },
+                {
+                    "apiVersion": "2015-11-01-preview",
+                    "type": "datasources",
+                    "name": "VMInsights-LogicalDisk-Disk-TransfersSec",
+                    "dependsOn": [
+                        "[variables('WorkspaceResourceId')]"
+                    ],
+                    "kind": "WindowsPerformanceCounter",
+                    "properties": {
+                        "objectName": "LogicalDisk",
+                        "instanceName": "*",
+                        "intervalSeconds": 60,
+                        "counterName": "Disk Transfers/sec"
+                    }
+                },
+                {
+                    "apiVersion": "2015-11-01-preview",
+                    "type": "datasources",
+                    "name": "VMInsights-LogicalDisk-Disk-WriteBytesSec",
+                    "dependsOn": [
+                        "[variables('WorkspaceResourceId')]"
+                    ],
+                    "kind": "WindowsPerformanceCounter",
+                    "properties": {
+                        "objectName": "LogicalDisk",
+                        "instanceName": "*",
+                        "intervalSeconds": 60,
+                        "counterName": "Disk Write Bytes/sec"
+                    }
+                },
+                {
+                    "apiVersion": "2015-11-01-preview",
+                    "type": "datasources",
+                    "name": "VMInsights-LogicalDisk-Disk-WritesSec",
+                    "dependsOn": [
+                        "[variables('WorkspaceResourceId')]"
+                    ],
+                    "kind": "WindowsPerformanceCounter",
+                    "properties": {
+                        "objectName": "LogicalDisk",
+                        "instanceName": "*",
+                        "intervalSeconds": 60,
+                        "counterName": "Disk Writes/sec"
+                    }
+                },
+                {
+                    "apiVersion": "2015-11-01-preview",
+                    "type": "datasources",
+                    "name": "VMInsights-LogicalDisk-FreeMegabytes",
+                    "dependsOn": [
+                        "[variables('WorkspaceResourceId')]"
+                    ],
+                    "kind": "WindowsPerformanceCounter",
+                    "properties": {
+                        "objectName": "LogicalDisk",
+                        "instanceName": "*",
+                        "intervalSeconds": 60,
+                        "counterName": "Free Megabytes"
+                    }
+                },
+                {
+                    "apiVersion": "2015-11-01-preview",
+                    "type": "datasources",
+                    "name": "VMInsights-Memory-AvailableMBytes",
+                    "dependsOn": [
+                        "[variables('WorkspaceResourceId')]"
+                    ],
+                    "kind": "WindowsPerformanceCounter",
+                    "properties": {
+                        "objectName": "Memory",
+                        "instanceName": "*",
+                        "intervalSeconds": 60,
+                        "counterName": "Available MBytes"
+                    }
+                },
+                {
+                    "apiVersion": "2015-11-01-preview",
+                    "type": "datasources",
+                    "name": "VMInsights-NetworkAdapter-BytesReceived-sec",
+                    "dependsOn": [
+                        "[variables('WorkspaceResourceId')]"
+                    ],
+                    "kind": "WindowsPerformanceCounter",
+                    "properties": {
+                        "objectName": "Network Adapter",
+                        "instanceName": "*",
+                        "intervalSeconds": 60,
+                        "counterName": "Bytes Received/sec"
+                    }
+                },
+                {
+                    "apiVersion": "2015-11-01-preview",
+                    "type": "datasources",
+                    "name": "VMInsights-NetworkAdapter-BytesSent-sec",
+                    "dependsOn": [
+                        "[variables('WorkspaceResourceId')]"
+                    ],
+                    "kind": "WindowsPerformanceCounter",
+                    "properties": {
+                        "objectName": "Network Adapter",
+                        "instanceName": "*",
+                        "intervalSeconds": 60,
+                        "counterName": "Bytes Sent/sec"
+                    }
+                },
+                {
+                    "apiVersion": "2015-11-01-preview",
+                    "type": "datasources",
+                    "name": "VMInsights-Processor-Pct-Processor-Time-Total",
+                    "dependsOn": [
+                        "[variables('WorkspaceResourceId')]"
+                    ],
+                    "kind": "WindowsPerformanceCounter",
+                    "properties": {
+                        "objectName": "Processor",
+                        "instanceName": "_Total",
+                        "intervalSeconds": 60,
+                        "counterName": "% Processor Time"
+                    }
+                },
+                {
+                    "apiVersion": "2015-11-01-preview",
+                    "type": "datasources",
+                    "name": "VMInsights-Logical-Disk-Linux",
+                    "dependsOn": [
+                        "[variables('WorkspaceResourceId')]"
+                    ],
+                    "kind": "LinuxPerformanceObject",
+                    "properties": {
+                        "objectName": "Logical Disk",
+                        "instanceName": "*",
+                        "intervalSeconds": 60,
+                        "performanceCounters": [
+                            {
+                                "counterName": "% Used Space"
+                            },
+                            {
+                                "counterName": "Disk Read Bytes/sec"
+                            },
+                            {
+                                "counterName": "Disk Reads/sec"
+                            },
+                            {
+                                "counterName": "Disk Transfers/sec"
+                            },
+                            {
+                                "counterName": "Disk Write Bytes/sec"
+                            },
+                            {
+                                "counterName": "Disk Writes/sec"
+                            },
+                            {
+                                "counterName": "Free Megabytes"
+                            },
+                            {
+                                "counterName": "Logical Disk Bytes/sec"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "apiVersion": "2015-11-01-preview",
+                    "type": "datasources",
+                    "name": "VMInsights-Memory-Linux",
+                    "dependsOn": [
+                        "[variables('WorkspaceResourceId')]"
+                    ],
+                    "kind": "LinuxPerformanceObject",
+                    "properties": {
+                        "objectName": "Memory",
+                        "instanceName": "*",
+                        "intervalSeconds": 60,
+                        "performanceCounters": [
+                            {
+                                "counterName": "Available MBytes Memory"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "apiVersion": "2015-11-01-preview",
+                    "type": "datasources",
+                    "name": "VMInsights-Network",
+                    "dependsOn": [
+                        "[variables('WorkspaceResourceId')]"
+                    ],
+                    "kind": "LinuxPerformanceObject",
+                    "properties": {
+                        "objectName": "Network",
+                        "instanceName": "*",
+                        "intervalSeconds": 60,
+                        "performanceCounters": [
+                            {
+                                "counterName": "Total Bytes Received"
+                            },
+                            {
+                                "counterName": "Total Bytes Transmitted"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "apiVersion": "2015-11-01-preview",
+                    "type": "datasources",
+                    "name": "VMInsights-Processor-Pct-Processor-Time-Linux",
+                    "dependsOn": [
+                        "[variables('WorkspaceResourceId')]"
+                    ],
+                    "kind": "LinuxPerformanceObject",
+                    "properties": {
+                        "objectName": "Processor",
+                        "instanceName": "*",
+                        "intervalSeconds": 60,
+                        "performanceCounters": [
+                            {
+                                "counterName": "% Processor Time"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "apiVersion": "2015-11-01-preview",
+                    "type": "datasources",
+                    "name": "DataSource_LinuxPerformanceCollection",
+                    "dependsOn": [
+                        "[variables('WorkspaceResourceId')]"
+                    ],
+                    "kind": "LinuxPerformanceCollection",
+                    "properties": {
+                        "state": "Enabled"
+                    }
+                }
+            ]
+        },
+        {
+            "type": "Microsoft.Network/publicIPAddresses",
+            "apiVersion": "2018-08-01",
+            "name": "shlb",
+            "location": "[resourceGroup().location]",
+            "sku": {
+                "name": "Standard"
+            },
+            "tags": {
+                "displayName": "shlb"
+            },
+            "properties": {
+                "publicIPAllocationMethod": "Static",
+                "dnsSettings": {
+                    "domainNameLabel": "[concat(parameters('dnsPrefix'), '-search-', variables('resgpguid'))]"
+                }
+            }
+        },
+        {
+            "apiVersion": "2018-08-01",
+            "name": "loadBalancer-sh",
+            "type": "Microsoft.Network/loadBalancers",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "[concat('Microsoft.Network/publicIPAddresses/', 'shlb')]"
+            ],
+            "sku": {
+                "name": "Standard"
+            },
+            "properties": {
+                "frontendIPConfigurations": [
+                    {
+                        "name": "LoadBalancerFrontEnd",
+                        "properties": {
+                            "publicIPAddress": {
+                                "id": "[resourceId('Microsoft.Network/publicIPAddresses', 'shlb')]"
+                            }
+                        }
+                    }
+                ],
+                "backendAddressPools": [
+                    {
+                        "name": "LoadBalancerBackEndPool1"
+                    }
+                ],
+                "loadBalancingRules": [
+                    {
+                        "name": "LBRule1",
+                        "properties": {
+                            "frontendIPConfiguration": {
+                                "id": "[concat(resourceId('Microsoft.Network/loadBalancers', 'loadBalancer-sh'),'/frontendIPConfigurations/LoadBalancerFrontEnd')]"
+                            },
+                            "backendAddressPool": {
+                                "id": "[concat(resourceId('Microsoft.Network/loadBalancers', 'loadBalancer-sh'),'/backendAddressPools/LoadBalancerBackEndPool1')]"
+                            },
+                            "protocol": "tcp",
+                            "frontendPort": 8000,
+                            "backendPort": 8000,
+                            "enableFloatingIP": false,
+                            "loadDistribution": "SourceIP",
+                            "idleTimeoutInMinutes": 5,
+                            "probe": {
+                                "id": "[concat(resourceId('Microsoft.Network/loadBalancers', 'loadBalancer-sh'),'/probes/tcpProbe')]"
+                            }
+                        }
+                    }
+                ],
+                "probes": [
+                    {
+                        "name": "tcpProbe",
+                        "properties": {
+                            "protocol": "tcp",
+                            "port": 8000,
+                            "intervalInSeconds": 5,
+                            "numberOfProbes": 2
+                        }
+                    }
+                ]
+            }
+        }
+    ],
+    "outputs": {
+        "subscriptionId": {
+            "type": "string",
+            "value": "[subscription().subscriptionId]"
+        },
+        "resourceGroupName": {
+            "type": "string",
+            "value": "[resourceGroup().name]"
+        },
+        "clusterMasterZone": {
+            "type": "string",
+            "value": "[substring(string(reference('Microsoft.Compute/virtualMachines/master', '2019-03-01', 'Full').zones), 2, 1)]"
+        },
+        "clusterMasterIp": {
+            "type": "string",
+            "value": "[reference('Microsoft.Network/networkInterfaces/master', '2018-08-01').ipConfigurations[0].properties.privateIPAddress]"
+        }
+    }
+}

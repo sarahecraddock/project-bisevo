@@ -1,0 +1,65 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "linuxUserName": {
+            "value": "azadmin"
+        },
+        "linuxSSHKey": {
+            "value": ""
+        },
+        "splunkUser": {
+            "value": ""
+        },
+        "splunkPassword": {
+            "value": ""
+        },
+        "virtualNetworkAddressPrefix": {
+            "value": "192.168.0.0/16"
+        },
+        "indexerSubnetAddressPrefix": {
+            "value": "192.168.0.0/24"
+        },
+        "searchSubnetAddressPrefix": {
+            "value": "192.168.1.0/24"
+        },
+        "managementSubnetAddressPrefix": {
+            "value": "192.168.3.0/24"
+        },
+        "numberOfIndexers": {
+            "value": 3
+        },
+        "numberOfSearchHeads": {
+            "value": 3
+        },
+        "indexerSku": {
+            "value": "Standard_L64s_v2"
+        },
+        "searchHeadSku": {
+            "value": "Standard_D32s_v3"
+        },
+        "cmSku": {
+            "value": "Standard_D4s_v3"
+        },
+        "dnsPrefix": {
+            "value": "splunk"
+        },
+        "vmImage": {
+            "value": {
+                "publisher": "Canonical",
+                "offer": "UbuntuServer",
+                "sku": "18.04-LTS",
+                "version": "latest"
+            }
+        },
+        "cmZone": {
+            "value": "1"
+        },
+        "indexerPipelines": {
+            "value": 2
+        },
+        "workspaceLocation": {
+            "value": "westeurope"
+        }
+    }
+}

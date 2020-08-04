@@ -1,0 +1,272 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/0.1.2-preview/CreateUIDefinition.MultiVm.json#",
+    "handler": "Microsoft.Azure.CreateUIDef",
+    "version": "0.1.2-preview",
+    "parameters": {
+        "basics": [
+            {}
+        ],
+        "steps": [
+            {
+                "name": "osConfig",
+                "label": "General VM Settings",
+                "elements": [
+                    {
+                        "name": "vmUserName",
+                        "type": "Microsoft.Compute.UserNameTextBox",
+                        "label": "User name",
+                        "defaultValue": "",
+                        "toolTip": "",
+                        "constraints": {
+                            "required": true,
+                            "regex": "^[a-z0-9A-Z]{1,30}$",
+                            "validationMessage": "Only alphanumeric characters are allowed, and the value must be 1-30 characters long."
+                        },
+                        "osPlatform": "Linux",
+                        "visible": true
+                    },
+                    {
+                        "name": "vmSSHKey",
+                        "type": "Microsoft.Compute.CredentialsCombo",
+                        "label": {
+                            "authenticationType": "Authentication type",
+                            "password": "Password",
+                            "confirmPassword": "Confirm password",
+                            "sshPublicKey": "SSH public key"
+                        },
+                        "toolTip": {
+                            "authenticationType": "",
+                            "password": "",
+                            "sshPublicKey": ""
+                        },
+                        "constraints": {
+                            "required": true,
+                            "customPasswordRegex": "^(?=.*[A-Za-z])(?=.*\\d)[A-Za-z\\d]{12,}$",
+                            "customValidationMessage": "The password must be alphanumeric, contain at least 12 characters, and have at least 1 letter and 1 number."
+                        },
+                        "options": {
+                            "hideConfirmation": false,
+                            "hidePassword": true
+                        },
+                        "osPlatform": "Linux",
+                        "visible": true
+                    },
+                    {
+                        "name": "acceleratedNetworking",
+                        "type": "Microsoft.Common.OptionsGroup",
+                        "label": "Accelerated Networking",
+                        "defaultValue": "Enabled",
+                        "toolTip": "We recommend Accelerated Networking is enabled to improve network latency and throughput",
+                        "constraints": {
+                            "allowedValues": [
+                                {
+                                    "label": "Enabled",
+                                    "value": true
+                                },
+                                {
+                                    "label": "Disabled",
+                                    "value": false
+                                }
+                            ],
+                            "required": true
+                        },
+                        "visible": true
+                    }
+                ]
+            },
+            {
+                "name": "splunkConfig",
+                "label": "General Splunk Settings",
+                "elements": [
+                    {
+                        "name": "splunkUserName",
+                        "type": "Microsoft.Compute.UserNameTextBox",
+                        "label": "User name",
+                        "defaultValue": "",
+                        "toolTip": "",
+                        "constraints": {
+                            "required": true,
+                            "regex": "^[a-z0-9A-Z]{1,30}$",
+                            "validationMessage": "Only alphanumeric characters are allowed, and the value must be 1-30 characters long."
+                        },
+                        "osPlatform": "Linux",
+                        "visible": true
+                    },
+                    {
+                        "name": "splunkPassword",
+                        "type": "Microsoft.Compute.CredentialsCombo",
+                        "label": {
+                            "password": "Password",
+                            "confirmPassword": "Confirm password"
+                        },
+                        "toolTip": {
+                            "password": ""
+                        },
+                        "constraints": {
+                            "required": true,
+                            "customPasswordRegex": "^(?=.*[A-Za-z])(?=.*\\d)[A-Za-z\\d]{12,}$",
+                            "customValidationMessage": "The password must be alphanumeric, contain at least 12 characters, and have at least 1 letter and 1 number."
+                        },
+                        "options": {
+                            "hideConfirmation": false
+                        },
+                        "osPlatform": "Windows",
+                        "visible": true
+                    }
+                ]
+            },
+            {
+                "name": "indexerConfig",
+                "label": "Indexer Configuration",
+                "elements": [
+                    {
+                        "name": "indexerCount",
+                        "type": "Microsoft.Common.Slider",
+                        "min": 3,
+                        "max": 75,
+                        "label": "Number of Indexers",
+                        "subLabel": "Virtual Machines",
+                        "defaultValue": 3,
+                        "showStepMarkers": false,
+                        "toolTip": "Select the number of Indexer VMs in the cluster",
+                        "constraints": {
+                            "required": true
+                        },
+                        "visible": true
+                    },
+                    {
+                        "name": "indexerSize",
+                        "type": "Microsoft.Compute.SizeSelector",
+                        "label": "Size",
+                        "toolTip": "",
+                        "recommendedSizes": [
+                            "Standard_L64s_v2",
+                            "Standard_D64s_v3"
+                        ],
+                        "constraints": {
+                            "allowedSizes": [
+                                "Standard_L16s_v2",
+                                "Standard_L32s_v2",
+                                "Standard_L64s_v2",
+                                "Standard_D16s_v3",
+                                "Standard_D32s_v3",
+                                "Standard_D64s_v3"
+                            ],
+                            "numAvailabilityZonesRequired": 3,
+                            "zone": "3"
+                        },
+                        "options": {
+                            "hideDiskTypeFilter": true
+                        },
+                        "osPlatform": "Linux",
+                        "imageReference": {
+                            "publisher": "Canonical",
+                            "offer": "UbuntuServer",
+                            "sku": "18.04-LTS"
+                        },
+                        "count": "[steps('indexerConfig').indexerCount]",
+                        "visible": true
+                    },
+                    {
+                        "name": "indexerPipelines",
+                        "type": "Microsoft.Common.OptionsGroup",
+                        "label": "Number of indexing pipelines",
+                        "defaultValue": "2",
+                        "toolTip": "",
+                        "constraints": {
+                            "allowedValues": [
+                                {
+                                    "label": "1",
+                                    "value": 1
+                                },
+                                {
+                                    "label": "2",
+                                    "value": 2
+                                }
+                            ],
+                            "required": true
+                        },
+                        "visible": true
+                    }
+                ]
+            },
+            {
+                "name": "shConfig",
+                "label": "Search Head Configuration",
+                "elements": [
+                    {
+                        "name": "shCount",
+                        "type": "Microsoft.Common.Slider",
+                        "min": 3,
+                        "max": 75,
+                        "label": "Number of Searh Heads",
+                        "subLabel": "Virtual Machines",
+                        "defaultValue": 3,
+                        "showStepMarkers": false,
+                        "toolTip": "Select the number of Search Heads in the cluster",
+                        "constraints": {
+                            "required": true
+                        },
+                        "visible": true
+                    },
+                    {
+                        "name": "shSize",
+                        "type": "Microsoft.Compute.SizeSelector",
+                        "label": "Size",
+                        "toolTip": "",
+                        "recommendedSizes": [
+                            "Standard_D64s_v3"
+                        ],
+                        "constraints": {
+                            "allowedSizes": [
+                                "Standard_D16s_v3",
+                                "Standard_D32s_v3",
+                                "Standard_D64s_v3"
+                            ],
+                            "numAvailabilityZonesRequired": 3,
+                            "zone": "3"
+                        },
+                        "options": {
+                            "hideDiskTypeFilter": true
+                        },
+                        "osPlatform": "Linux",
+                        "imageReference": {
+                            "publisher": "Canonical",
+                            "offer": "UbuntuServer",
+                            "sku": "18.04-LTS"
+                        },
+                        "count": "[steps('indexerConfig').indexerCount]",
+                        "visible": true
+                    }
+                ]
+            },
+            {
+                "name": "tags",
+                "label": "Tags",
+                "elements": [
+                    {
+                        "name": "tagsByResource",
+                        "type": "Microsoft.Common.TagsByResource",
+                        "resources": [
+                            "Microsoft.Storage/storageAccounts",
+                            "Microsoft.Compute/virtualMachines"
+                        ]
+                    }
+                ]
+            }
+        ],
+        "outputs": {
+            "linuxUserName": "[steps('osConfig').vmUserName]",
+            "linuxSSHKey": "[steps('osConfig').vmSSHKey]",
+            "splunkUser": "[steps('splunkConfig').splunkUserName]",
+            "splunkPassword": "[steps('splunkConfig').splunkPassword]",
+            "numberOfIndexers": "[steps('indexerConfig').indexerCount]",
+            "indexerSku": "[steps('indexerConfig').indexerSize]",
+            "indexerPipelines": "[steps('indexerConfig').indexerPipelines]",
+            "numberOfSearchHeads": "[steps('shConfig').shCount]",
+            "searchHeadSku": "[steps('shConfig').shSize]",
+            "location": "[location()]",
+            "tagsByResource": "[steps('tags').tagsByResource]"
+        }
+    }
+}
