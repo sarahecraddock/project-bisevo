@@ -102,7 +102,7 @@
             }
         },
         "splunkPassword": {
-            "type": "securestring",
+            "type": "string",
             "metadata": {
                 "description": "Password to use during Splunk install"
             }
