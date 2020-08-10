@@ -90,7 +90,7 @@
             "defaultValue": {
                 "publisher": "Canonical",
                 "offer": "UbuntuServer",
-                "sku": "16.04-LTS",
+                "sku": "18.04-LTS",
                 "version": "latest"
             }
         },
@@ -98,7 +98,7 @@
             "type": "string",
             "defaultValue": "admin",
             "metadata": {
-                "description": "Splunk user name to user during Splunk install"
+                "description": "Splunk user name to use during Splunk install"
             }
         },
         "splunkPassword": {

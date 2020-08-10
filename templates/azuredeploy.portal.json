@@ -134,7 +134,7 @@
                     {
                         "name": "deployHeavyForwarders",
                         "type": "Microsoft.Common.OptionsGroup",
-                        "label": "Deploy Heavy Forwarders",
+                        "label": "Provision Heavy Forwarders",
                         "defaultValue": "No",
                         "toolTip": "",
                         "constraints": {
@@ -194,6 +194,70 @@
                         },
                         "count": "[steps('splunkConfig').heavyForwarderCount]",
                         "visible": "[steps('splunkConfig').deployHeavyForwarders]"
+                    },
+                    {
+                        "name": "deployDeploymentServer",
+                        "type": "Microsoft.Common.OptionsGroup",
+                        "label": "Provision Deployment Server(s)",
+                        "defaultValue": "No",
+                        "toolTip": "",
+                        "constraints": {
+                            "allowedValues": [
+                                {
+                                    "label": "No",
+                                    "value": false
+                                },
+                                {
+                                    "label": "Yes",
+                                    "value": true
+                                }
+                            ],
+                            "required": true
+                        },
+                        "visible": true
+                    },
+                    {
+                        "name": "deploymentServerCount",
+                        "type": "Microsoft.Common.Slider",
+                        "min": 3,
+                        "max": 10,
+                        "label": "Number of Deployment Servers",
+                        "subLabel": "Virtual Machines",
+                        "defaultValue": 3,
+                        "showStepMarkers": false,
+                        "toolTip": "Select the number of Deployment Server VMs",
+                        "constraints": {
+                            "required": true
+                        },
+                        "visible": "[steps('splunkConfig').deployDeploymentServer]"
+                    },
+                    {
+                        "name": "deploymentServerSize",
+                        "type": "Microsoft.Compute.SizeSelector",
+                        "label": "Size",
+                        "toolTip": "",
+                        "recommendedSizes": [
+                            "Standard_D8s_v3"
+                        ],
+                        "constraints": {
+                            "allowedSizes": [
+                                "Standard_D4s_v3",
+                                "Standard_D8s_v3",
+                                "Standard_D16s_v3"
+                            ],
+                            "numAvailabilityZonesRequired": 3
+                        },
+                        "options": {
+                            "hideDiskTypeFilter": true
+                        },
+                        "osPlatform": "Linux",
+                        "imageReference": {
+                            "publisher": "Canonical",
+                            "offer": "UbuntuServer",
+                            "sku": "18.04-LTS"
+                        },
+                        "count": "[steps('splunkConfig').deploymentServerCount]",
+                        "visible": "[steps('splunkConfig').deployDeploymentServer]"
                     }
                 ]
             },
