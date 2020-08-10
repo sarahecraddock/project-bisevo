@@ -8,6 +8,196 @@
         ],
         "steps": [
             {
+                "name": "nwConfig",
+                "label": "Networking",
+                "elements": [
+                    {
+                        "name": "vnetConfig",
+                        "type": "Microsoft.Network.VirtualNetworkCombo",
+                        "label": {
+                            "virtualNetwork": "Virtual network",
+                            "subnets": "Subnets"
+                        },
+                        "toolTip": {
+                            "virtualNetwork": "",
+                            "subnets": ""
+                        },
+                        "defaultValue": {
+                            "name": "splunk",
+                            "addressPrefixSize": "/16"
+                        },
+                        "constraints": {
+                            "minAddressPrefixSize": "/23"
+                        },
+                        "options": {
+                            "hideExisting": true
+                        },
+                        "subnets": {
+                            "subnet1": {
+                                "label": "Indexer Subnet",
+                                "defaultValue": {
+                                    "name": "indexers",
+                                    "addressPrefixSize": "/24"
+                                },
+                                "constraints": {
+                                    "minAddressPrefixSize": "/25",
+                                    "requireContiguousAddresses": true
+                                }
+                            },
+                            "subnet2": {
+                                "label": "Search Subnet",
+                                "defaultValue": {
+                                    "name": "search",
+                                    "addressPrefixSize": "/24"
+                                },
+                                "constraints": {
+                                    "minAddressPrefixSize": "/25",
+                                    "requireContiguousAddresses": true
+                                }
+                            },
+                            "subnet3": {
+                                "label": "Management Subnet",
+                                "defaultValue": {
+                                    "name": "management",
+                                    "addressPrefixSize": "/24"
+                                },
+                                "constraints": {
+                                    "minAddressPrefixSize": "/28",
+                                    "requireContiguousAddresses": true
+                                }
+                            },
+                            "subnet4": {
+                                "label": "Forwarder Subnet",
+                                "defaultValue": {
+                                    "name": "forwarder",
+                                    "addressPrefixSize": "/24"
+                                },
+                                "constraints": {
+                                    "minAddressPrefixSize": "/26",
+                                    "requireContiguousAddresses": true
+                                }
+                            },
+                            "subnet5": {
+                                "label": "Azure Bastion Subnet",
+                                "defaultValue": {
+                                    "name": "AzureBastionSubnet",
+                                    "addressPrefixSize": "/27"
+                                },
+                                "constraints": {
+                                    "minAddressPrefixSize": "/27",
+                                    "requireContiguousAddresses": true
+                                }
+                            }
+                        },
+                        "visible": true
+                    }
+                ]
+            },
+            {
+                "name": "splunkConfig",
+                "label": "Splunk General",
+                "elements": [
+                    {
+                        "name": "splunkLicense",
+                        "type": "Microsoft.Common.FileUpload",
+                        "label": "Splunk License File",
+                        "toolTip": "",
+                        "constraints": {
+                            "required": true,
+                            "accept": ".license,.xml"
+                        },
+                        "options": {
+                            "multiple": false,
+                            "uploadMode": "url",
+                            "openMode": "text",
+                            "encoding": "UTF-8"
+                        },
+                        "visible": true
+                    },
+                    {
+                        "name": "splunkInstaller",
+                        "type": "Microsoft.Common.FileUpload",
+                        "label": "Splunk Enterprise Install",
+                        "toolTip": "Splunk Enterprise Linux install (.tgz) file",
+                        "constraints": {
+                            "required": true,
+                            "accept": ".tgz"
+                        },
+                        "options": {
+                            "multiple": false,
+                            "uploadMode": "url",
+                            "openMode": "binary",
+                            "encoding": "UTF-8"
+                        },
+                        "visible": true
+                    },
+                    {
+                        "name": "deployHeavyForwarders",
+                        "type": "Microsoft.Common.OptionsGroup",
+                        "label": "Deploy Heavy Forwarders",
+                        "defaultValue": "No",
+                        "toolTip": "",
+                        "constraints": {
+                            "allowedValues": [
+                                {
+                                    "label": "No",
+                                    "value": false
+                                },
+                                {
+                                    "label": "Yes",
+                                    "value": true
+                                }
+                            ],
+                            "required": true
+                        },
+                        "visible": true
+                    },
+                    {
+                        "name": "heavyForwarderCount",
+                        "type": "Microsoft.Common.Slider",
+                        "min": 3,
+                        "max": 50,
+                        "label": "Number of Heavy Forwarders",
+                        "subLabel": "Virtual Machines",
+                        "defaultValue": 3,
+                        "showStepMarkers": false,
+                        "toolTip": "Select the number of Heavy Forwarder VMs",
+                        "constraints": {
+                            "required": true
+                        },
+                        "visible": "[steps('splunkConfig').deployHeavyForwarders]"
+                    },
+                    {
+                        "name": "heavyForwarderSize",
+                        "type": "Microsoft.Compute.SizeSelector",
+                        "label": "Size",
+                        "toolTip": "",
+                        "recommendedSizes": [
+                            "Standard_D8s_v3"
+                        ],
+                        "constraints": {
+                            "allowedSizes": [
+                                "Standard_D4s_v3",
+                                "Standard_D8s_v3",
+                                "Standard_D16s_v3"
+                            ],
+                            "numAvailabilityZonesRequired": 3
+                        },
+                        "options": {
+                            "hideDiskTypeFilter": true
+                        },
+                        "osPlatform": "Linux",
+                        "imageReference": {
+                            "publisher": "Canonical",
+                            "offer": "UbuntuServer",
+                            "sku": "18.04-LTS"
+                        },
+                        "count": "[steps('splunkConfig').heavyForwarderCount]",
+                        "visible": "[steps('splunkConfig').deployHeavyForwarders]"
+                    }
+                ]
+            },
+            {
                 "name": "osConfig",
                 "label": "General VM Settings",
                 "elements": [
@@ -75,47 +265,6 @@
                 ]
             },
             {
-                "name": "splunkConfig",
-                "label": "General Splunk Settings",
-                "elements": [
-                    {
-                        "name": "splunkUserName",
-                        "type": "Microsoft.Compute.UserNameTextBox",
-                        "label": "User name",
-                        "defaultValue": "",
-                        "toolTip": "",
-                        "constraints": {
-                            "required": true,
-                            "regex": "^[a-z0-9A-Z]{1,30}$",
-                            "validationMessage": "Only alphanumeric characters are allowed, and the value must be 1-30 characters long."
-                        },
-                        "osPlatform": "Linux",
-                        "visible": true
-                    },
-                    {
-                        "name": "splunkPassword",
-                        "type": "Microsoft.Compute.CredentialsCombo",
-                        "label": {
-                            "password": "Password",
-                            "confirmPassword": "Confirm password"
-                        },
-                        "toolTip": {
-                            "password": ""
-                        },
-                        "constraints": {
-                            "required": true,
-                            "customPasswordRegex": "^(?=.*[A-Za-z])(?=.*\\d)[A-Za-z\\d]{12,}$",
-                            "customValidationMessage": "The password must be alphanumeric, contain at least 12 characters, and have at least 1 letter and 1 number."
-                        },
-                        "options": {
-                            "hideConfirmation": false
-                        },
-                        "osPlatform": "Windows",
-                        "visible": true
-                    }
-                ]
-            },
-            {
                 "name": "indexerConfig",
                 "label": "Indexer Configuration",
                 "elements": [
@@ -152,8 +301,7 @@
                                 "Standard_D32s_v3",
                                 "Standard_D64s_v3"
                             ],
-                            "numAvailabilityZonesRequired": 3,
-                            "zone": "3"
+                            "numAvailabilityZonesRequired": 3
                         },
                         "options": {
                             "hideDiskTypeFilter": true
@@ -223,8 +371,7 @@
                                 "Standard_D32s_v3",
                                 "Standard_D64s_v3"
                             ],
-                            "numAvailabilityZonesRequired": 3,
-                            "zone": "3"
+                            "numAvailabilityZonesRequired": 3
                         },
                         "options": {
                             "hideDiskTypeFilter": true
