@@ -170,7 +170,7 @@
                     {
                         "name": "heavyForwarderSize",
                         "type": "Microsoft.Compute.SizeSelector",
-                        "label": "Size",
+                        "label": "Heavy Forwarder Size",
                         "toolTip": "",
                         "recommendedSizes": [
                             "Standard_D8s_v3"
@@ -234,7 +234,7 @@
                     {
                         "name": "deploymentServerSize",
                         "type": "Microsoft.Compute.SizeSelector",
-                        "label": "Size",
+                        "label": "Deployment Server Size",
                         "toolTip": "",
                         "recommendedSizes": [
                             "Standard_D8s_v3"
@@ -258,6 +258,55 @@
                         },
                         "count": "[steps('splunkConfig').deploymentServerCount]",
                         "visible": "[steps('splunkConfig').deployDeploymentServer]"
+                    },
+                    {
+                        "name": "deployShDeployerServer",
+                        "type": "Microsoft.Common.OptionsGroup",
+                        "label": "Provision Search Head Deployer",
+                        "defaultValue": "No",
+                        "toolTip": "",
+                        "constraints": {
+                            "allowedValues": [
+                                {
+                                    "label": "No",
+                                    "value": false
+                                },
+                                {
+                                    "label": "Yes",
+                                    "value": true
+                                }
+                            ],
+                            "required": true
+                        },
+                        "visible": true
+                    },
+                    {
+                        "name": "shDeployerSize",
+                        "type": "Microsoft.Compute.SizeSelector",
+                        "label": "Search Head Deployer Size",
+                        "toolTip": "",
+                        "recommendedSizes": [
+                            "Standard_8s_v3"
+                        ],
+                        "constraints": {
+                            "allowedSizes": [
+                                "Standard_D4s_v3",
+                                "Standard_D8s_v3",
+                                "Standard_D16s_v3"
+                            ],
+                            "numAvailabilityZonesRequired": 3
+                        },
+                        "options": {
+                            "hideDiskTypeFilter": true
+                        },
+                        "osPlatform": "Linux",
+                        "imageReference": {
+                            "publisher": "Canonical",
+                            "offer": "UbuntuServer",
+                            "sku": "18.04-LTS"
+                        },
+                        "count": 1,
+                        "visible": "[steps('splunkConfig').deployShDeployerServer]"
                     }
                 ]
             },
@@ -304,27 +353,6 @@
                         },
                         "osPlatform": "Linux",
                         "visible": true
-                    },
-                    {
-                        "name": "acceleratedNetworking",
-                        "type": "Microsoft.Common.OptionsGroup",
-                        "label": "Accelerated Networking",
-                        "defaultValue": "Enabled",
-                        "toolTip": "We recommend Accelerated Networking is enabled to improve network latency and throughput",
-                        "constraints": {
-                            "allowedValues": [
-                                {
-                                    "label": "Enabled",
-                                    "value": true
-                                },
-                                {
-                                    "label": "Disabled",
-                                    "value": false
-                                }
-                            ],
-                            "required": true
-                        },
-                        "visible": true
                     }
                 ]
             },
@@ -332,6 +360,34 @@
                 "name": "indexerConfig",
                 "label": "Indexer Configuration",
                 "elements": [
+                    {
+                        "name": "clusterMasterSize",
+                        "type": "Microsoft.Compute.SizeSelector",
+                        "label": "Cluster Master Size",
+                        "toolTip": "",
+                        "recommendedSizes": [
+                            "Standard_D4s_v3"
+                        ],
+                        "constraints": {
+                            "allowedSizes": [
+                                "Standard_D4s_v3",
+                                "Standard_D8s_v3",
+                                "Standard_D16s_v3",
+                                "Standard_D32s_v3"
+                            ]
+                        },
+                        "options": {
+                            "hideDiskTypeFilter": true
+                        },
+                        "osPlatform": "Linux",
+                        "imageReference": {
+                            "publisher": "Canonical",
+                            "offer": "UbuntuServer",
+                            "sku": "18.04-LTS"
+                        },
+                        "count": 1,
+                        "visible": true
+                    },
                     {
                         "name": "indexerCount",
                         "type": "Microsoft.Common.Slider",
@@ -350,7 +406,7 @@
                     {
                         "name": "indexerSize",
                         "type": "Microsoft.Compute.SizeSelector",
-                        "label": "Size",
+                        "label": "Indexer Size",
                         "toolTip": "",
                         "recommendedSizes": [
                             "Standard_L64s_v2",
@@ -377,6 +433,46 @@
                             "sku": "18.04-LTS"
                         },
                         "count": "[steps('indexerConfig').indexerCount]",
+                        "visible": true
+                    },
+                    {
+                        "name": "indexerInfo",
+                        "type": "Microsoft.Common.InfoBox",
+                        "visible": "[contains(steps('indexerConfig').indexerSize, '_L')]",
+                        "options": {
+                            "icon": "Info",
+                            "text": "As you have selected a VM size from the Lv2 family the hot/warm volume will be configured to the combined size of the local NVMe disks for the chosen SKU.",
+                            "uri": "https://docs.microsoft.com/en-us/azure/virtual-machines/lsv2-series"
+                        }
+                    },
+                    {
+                        "name": "hotDiskSize",
+                        "type": "Microsoft.Common.Slider",
+                        "min": 1024,
+                        "max": 32768,
+                        "label": "Hot/Warm Volume Size",
+                        "subLabel": "TB",
+                        "defaultValue": 1024,
+                        "showStepMarkers": true,
+                        "toolTip": "Select the volume size for hot/warm data",
+                        "constraints": {
+                            "required": true
+                        },
+                        "visible": "[contains(steps('indexerConfig').indexerSize, '_D')]"
+                    },
+                    {
+                        "name": "coldDiskSize",
+                        "type": "Microsoft.Common.Slider",
+                        "min": 1024,
+                        "max": 32768,
+                        "label": "Cold Volume Size",
+                        "subLabel": "GB",
+                        "defaultValue": 1024,
+                        "showStepMarkers": true,
+                        "toolTip": "Select the volume size for hot/warm data",
+                        "constraints": {
+                            "required": true
+                        },
                         "visible": true
                     },
                     {
@@ -424,7 +520,7 @@
                     {
                         "name": "shSize",
                         "type": "Microsoft.Compute.SizeSelector",
-                        "label": "Size",
+                        "label": "Search Head Size",
                         "toolTip": "",
                         "recommendedSizes": [
                             "Standard_D64s_v3"
@@ -446,7 +542,7 @@
                             "offer": "UbuntuServer",
                             "sku": "18.04-LTS"
                         },
-                        "count": "[steps('indexerConfig').indexerCount]",
+                        "count": "[steps('shConfig').shCount]",
                         "visible": true
                     }
                 ]
@@ -469,15 +565,20 @@
         "outputs": {
             "linuxUserName": "[steps('osConfig').vmUserName]",
             "linuxSSHKey": "[steps('osConfig').vmSSHKey.sshPublicKey]",
-            "splunkUser": "[steps('splunkConfig').splunkUserName]",
-            "splunkPassword": "[steps('splunkConfig').splunkPassword.password]",
             "numberOfIndexers": "[steps('indexerConfig').indexerCount]",
             "indexerSku": "[steps('indexerConfig').indexerSize]",
             "indexerPipelines": "[steps('indexerConfig').indexerPipelines]",
             "numberOfSearchHeads": "[steps('shConfig').shCount]",
             "searchHeadSku": "[steps('shConfig').shSize]",
             "location": "[location()]",
-            "tagsByResource": "[steps('tags').tagsByResource]"
+            "tagsByResource": "[steps('tags').tagsByResource]",
+            "splunkBlobUrl": "[steps('splunkConfig').splunkInstaller]",
+            "virtualNetworkAddressPrefix": "[steps('nwConfig').vnetConfig.addressPrefixes]",
+            "indexerSubnetAddressPrefix": "[steps('nwConfig').vnetConfig.subnet1.addressPrefix]",
+            "searchSubnetAddressPrefix": "[steps('nwConfig').vnetConfig.subnet2.addressPrefix]",
+            "managementSubnetAddressPrefix": "[steps('nwConfig').vnetConfig.subnet3.addressPrefix]",
+            "hotDiskSize": "[steps('indexerConfig').hotDiskSize]",
+            "coldDiskSize": "[steps('indexerConfig').coldDiskSize]"
         }
     }
 }

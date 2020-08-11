@@ -103,6 +103,7 @@
         },
         "splunkPassword": {
             "type": "string",
+            "defaultValue": "[uniqueString(resourceGroup().id)]",
             "metadata": {
                 "description": "Password to use during Splunk install"
             }
@@ -127,6 +128,26 @@
             "metadata": {
                 "description": "Location for log analytics workspace - included as parameter as VM Insights not available in every region"
             }
+        },
+        "splunkBlobUrl": {
+            "type": "string",
+            "metadata": {
+                "description": "URL for Splunk Enterprise .tgz file"
+            }
+        },
+        "hotDiskSize": {
+            "type": "int",
+            "defaultValue": 1024,
+            "metadata": {
+                "description": "Disk size for Premium SSD hot volume"
+            }
+        },
+        "coldDiskSize": {
+            "type": "int",
+            "defaultValue": 1024,
+            "metadata": {
+                "description": "Disk size for Standard HDD cold volume"
+            }
         }
     },
     "variables": {
@@ -144,7 +165,7 @@
         "cmInstallScriptDir": "[concat(variables('downloadRoot'), 'cluster-master')]",
         "indexerInstallScriptDir": "[concat(variables('downloadRoot'), 'indexer')]",
         "shInstallScriptDir": "[concat(variables('downloadRoot'), 'search-head')]",
-        "splunkDownload": "https://dwtoolstore.blob.core.windows.net/splunk/splunk-7.3.6-47d8552a4d84-Linux-x86_64.tgz",
+        "splunkDownload": "[parameters('splunkBlobUrl')]",
         "workspaceName": "[concat('splunklogs-', variables('resgpguid'))]",
         "daExtensionVersion": "9.5",
         "mmaExtensionVersion": "1.7",
@@ -157,7 +178,7 @@
                 "caching": "None",
                 "createOption": "Empty",
                 "lun": 0,
-                "diskSizeGB": 16384,
+                "diskSizeGB": "[parameters('coldDiskSize')]",
                 "managedDisk": {
                     "storageAccountType": "Standard_LRS"
                 }
@@ -168,7 +189,7 @@
                 "caching": "None",
                 "createOption": "Empty",
                 "lun": 1,
-                "diskSizeGB": 16384,
+                "diskSizeGB": "[parameters('coldDiskSize')]",
                 "managedDisk": {
                     "storageAccountType": "Standard_LRS"
                 }
@@ -177,7 +198,7 @@
                 "caching": "None",
                 "createOption": "Empty",
                 "lun": 0,
-                "diskSizeGB": 4096,
+                "diskSizeGB": "[parameters('hotDiskSize')]",
                 "managedDisk": {
                     "storageAccountType": "Premium_LRS"
                 }
@@ -594,8 +615,7 @@
                             "storageAccountType": "Premium_LRS"
                         }
                     },
-                    "dataDisks": 
-                        "[variables(variables('vmType'))]"
+                    "dataDisks": "[variables(variables('vmType'))]"
                 },
                 "osProfile": {
                     "computerName": "[concat('indexer', copyindex())]",
@@ -1301,6 +1321,14 @@
         "clusterMasterIp": {
             "type": "string",
             "value": "[reference('Microsoft.Network/networkInterfaces/master', '2018-08-01').ipConfigurations[0].properties.privateIPAddress]"
+        },
+        "splunkUser": {
+            "type": "string",
+            "value": "[parameters('splunkUser')]"
+        },
+        "splunkPassword": {
+            "type": "string",
+            "value": "[parameters('splunkPassword')]"
         }
     }
 }
